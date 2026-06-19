@@ -6,11 +6,14 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Loader2, MapPin,
   Calendar, Clock,
-  Smartphone, CreditCard, Truck, CheckCircle2
+  Smartphone, CreditCard, Truck, CheckCircle2, Gift
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
+import ReferralInput from '@/components/referral/ReferralInput'
+import { applyReferralCode } from '@/lib/referral'
+import { registerForPushNotifications } from '@/lib/push'
 
 declare global {
   interface Window {
@@ -88,6 +91,9 @@ export default function CheckoutPage() {
   // Payment
   const [paymentMethod, setPaymentMethod] = useState('upi')
 
+  // Referral
+  const [referralCode, setReferralCode] = useState('')
+
   const [form, setForm] = useState({
     name: '', phone: '', line1: '', line2: '', city: '', state: '', pincode: '',
   })
@@ -131,6 +137,8 @@ export default function CheckoutPage() {
         setForm((f) => ({ ...f, name: f.name || u.user_metadata?.full_name || '', phone: f.phone || u.user_metadata?.phone || '' }))
         setAuthNeeded(false); setAuthChecked(true)
         if (planId) loadPlan(planId)
+        // Register for push notifications after login
+        registerForPushNotifications(u.id).catch(() => {})
       } else { setUser(null); setAuthNeeded(true); setAuthChecked(true) }
     })
     return () => { mounted = false; subscription.unsubscribe() }
@@ -218,6 +226,10 @@ export default function CheckoutPage() {
         const result = await verify.json()
         if (result.success) {
           if (!selectedPlan) clearCart()
+          // Apply referral code if provided
+          if (referralCode && user?.id) {
+            await applyReferralCode(referralCode, user.id, result.orderId).catch(() => {})
+          }
           // Send invoice email
           await fetch('/api/invoice/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -484,6 +496,22 @@ export default function CheckoutPage() {
                     Carry forward to the next day if I'm unavailable
                   </span>
                 </label>
+              </div>
+
+              {/* Step 2b: Referral Code */}
+              <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-6">
+                <h2 className="font-extrabold text-gray-900 text-base mb-1 flex items-center gap-2.5">
+                  <span className="w-7 h-7 rounded-full bg-[#22c55e] text-white text-xs font-extrabold flex items-center justify-center">💚</span>
+                  <Gift size={16} className="text-[#22c55e]" /> Have a Referral Code?
+                </h2>
+                <p className="text-xs text-gray-400 ml-10 mb-3">Enter a friend's code to get started (optional)</p>
+                {user && (
+                  <ReferralInput
+                    userId={user.id}
+                    onValid={(code) => setReferralCode(code)}
+                    onClear={() => setReferralCode('')}
+                  />
+                )}
               </div>
 
               {/* Step 3: Payment Method */}
