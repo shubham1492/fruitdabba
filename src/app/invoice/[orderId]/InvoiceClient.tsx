@@ -51,7 +51,7 @@ export default function InvoiceClient({ order, invoiceNumber, gst, userEmail }: 
   const paymentMethod = order.payment_method || order.preferences?.paymentMethod || 'UPI'
 
   return (
-    <div className="min-h-screen bg-gray-50 pt-20 pb-16">
+    <div className="min-h-screen bg-gray-50 pt-16 pb-16">
       {/* Success banner */}
       <div className="max-w-2xl mx-auto px-4 mb-6">
         <div className="flex items-center justify-center gap-2.5 bg-[#22c55e]/10 border border-[#22c55e]/20 rounded-full px-5 py-2.5 text-sm font-semibold text-[#22c55e]">

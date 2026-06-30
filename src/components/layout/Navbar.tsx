@@ -158,6 +158,74 @@ export default function Navbar() {
     router.refresh()
   }
 
+  const isCheckoutOrInvoice = pathname?.startsWith('/checkout') || pathname?.startsWith('/invoice')
+
+  if (isCheckoutOrInvoice) {
+    return (
+      <header className="sticky top-0 z-50 w-full border-b border-gray-150 bg-white/95 backdrop-blur-md shadow-sm">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+          {/* Logo */}
+          <Link href="/" className="flex items-center gap-2">
+            <span className="flex size-8 items-center justify-center rounded-xl bg-forest text-white font-bold text-base shadow-md">
+              🍊
+            </span>
+            <span className="font-heading text-lg font-extrabold tracking-tight text-gray-900">
+              Fruit<span className="text-forest">Dabba</span>
+            </span>
+          </Link>
+
+          {/* Simple Link & User Dropdown */}
+          <div className="flex items-center gap-4">
+            <Link
+              href="/products"
+              className="text-xs font-extrabold text-gray-600 hover:text-forest transition-all flex items-center gap-1 bg-cream hover:bg-cream-100 border border-gray-200 px-3.5 py-2 rounded-xl shadow-sm"
+            >
+              ← Continue Shopping
+            </Link>
+
+            {user && (
+              <div className="relative">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="flex items-center gap-1.5 p-1 rounded-full text-gray-700 hover:bg-gray-100 transition-all duration-200 cursor-pointer bg-gray-50 border border-gray-200"
+                >
+                  <span className="flex items-center justify-center w-7 h-7 rounded-full bg-[#22c55e] text-white text-[10px] font-bold uppercase">
+                    {user.user_metadata?.full_name
+                      ? user.user_metadata.full_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)
+                      : 'U'}
+                  </span>
+                  <span className="text-xs font-bold text-gray-900 pr-1.5 max-w-[80px] truncate hidden sm:inline">
+                    {user.user_metadata?.full_name?.split(' ')[0] || 'User'}
+                  </span>
+                </button>
+
+                {isDropdownOpen && (
+                  <div className="absolute right-0 top-full mt-2 w-52 bg-white rounded-2xl shadow-xl border border-gray-100 py-2 z-50 animate-fade-in">
+                    <Link href="/profile" className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-cream transition-colors" onClick={() => setIsDropdownOpen(false)}>
+                      <User size={16} className="text-primary" /> My Profile
+                    </Link>
+                    <Link href="/orders" className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-cream transition-colors" onClick={() => setIsDropdownOpen(false)}>
+                      <Package size={16} className="text-primary" /> My Orders
+                    </Link>
+                    {isAdmin && (
+                      <Link href="/admin" className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-cream transition-colors" onClick={() => setIsDropdownOpen(false)}>
+                        <LayoutDashboard size={16} className="text-primary" /> Admin Dashboard
+                      </Link>
+                    )}
+                    <div className="border-t border-gray-100 my-1" />
+                    <button onClick={handleSignOut} className="flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors w-full text-left cursor-pointer">
+                      <LogOut size={16} /> Sign Out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+    )
+  }
+
   return (
     <div className="w-full">
       {/* Top Announcement Banner with City Selector */}

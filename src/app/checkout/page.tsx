@@ -429,12 +429,12 @@ export default function CheckoutPage() {
   const updateForm = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }))
 
   if (!authChecked || fetchingPlan) {
-    return <div className="min-h-screen bg-cream flex items-center justify-center pt-24"><Loader2 className="animate-spin text-forest" size={32} /></div>
+    return <div className="min-h-screen bg-cream flex items-center justify-center pt-16"><Loader2 className="animate-spin text-forest" size={32} /></div>
   }
 
   if (authNeeded) {
     return (
-      <div className="min-h-screen bg-cream pt-24 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-cream pt-16 flex items-center justify-center p-4">
         <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 my-8">
           <div className="bg-gradient-to-r from-forest to-forest-light p-8 text-white text-center">
             <div className="text-4xl mb-2">🍊</div>
@@ -602,7 +602,7 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="min-h-screen bg-cream pt-24">
+    <div className="min-h-screen bg-cream pt-16">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
         <form onSubmit={handleSubmit}>
           <div className="grid lg:grid-cols-3 gap-8">
