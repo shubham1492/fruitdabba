@@ -100,6 +100,7 @@ export interface Database {
           delivery_frequency: 'daily' | 'weekly' | 'biweekly' | 'monthly'
           features: Json | null
           is_popular: boolean
+          plan_type: string
           created_at: string
         }
         Insert: {
@@ -113,6 +114,7 @@ export interface Database {
           delivery_frequency?: 'daily' | 'weekly' | 'biweekly' | 'monthly'
           features?: Json | null
           is_popular?: boolean
+          plan_type?: string
         }
         Update: {
           name?: string
@@ -121,6 +123,7 @@ export interface Database {
           duration_days?: number
           discount_pct?: number
           is_popular?: boolean
+          plan_type?: string
         }
       }
       cart_items: {
