@@ -377,53 +377,86 @@ export function createClient() {
           mockAuthListeners.forEach((l) => l('SIGNED_OUT', null))
           return { error: null }
         },
-        signInWithOtp: async ({ phone, options }: { phone: string; options?: any }) => {
-          if (!phone) return { error: new Error('Phone number is required') }
-          const name = options?.data?.full_name || 'Phone User'
-          localOtpNamesMap[phone] = name
+        signInWithOtp: async ({ phone, email, options }: { phone?: string; email?: string; options?: any }) => {
+          const target = phone || email
+          if (!target) return { error: new Error('Phone number or email is required') }
+
+          const name = options?.data?.full_name || (email ? email.split('@')[0] : 'Phone User')
+          localOtpNamesMap[target] = name
           if (typeof global !== 'undefined') {
             if (!(global as any)._otpNames) (global as any)._otpNames = {}
-            ;(global as any)._otpNames[phone] = name
+            ;(global as any)._otpNames[target] = name
           }
           if (typeof window !== 'undefined') {
             if (!(window as any)._otpNames) (window as any)._otpNames = {}
-            ;(window as any)._otpNames[phone] = name
+            ;(window as any)._otpNames[target] = name
           }
-          const mockOtp = '123456'
+
+          // Generate dynamic random 6-digit OTP
+          const mockOtp = Math.floor(100000 + Math.random() * 900000).toString()
+
+          // Store statefully using localStorage (survives refreshes)
+          if (typeof window !== 'undefined') {
+            localStorage.setItem(`mock-otp-${target}`, mockOtp)
+          }
+
+          console.log(`[Mock Auth] Generated OTP for ${target}: ${mockOtp}`)
+
           if (typeof window !== 'undefined') {
             const { default: toast } = require('react-hot-toast')
-            toast.success(`[Mock Auth] OTP code sent to ${phone}: ${mockOtp}`, { duration: 8000 })
+            toast.success(`[Mock Auth] OTP code sent to ${target}: ${mockOtp}`, { duration: 15000 })
           }
           return { data: { message: 'OTP sent' }, error: null }
         },
-        verifyOtp: async ({ phone, token }: { phone: string; token: string }) => {
-          if (!phone || !token) return { error: new Error('Phone number and OTP token are required') }
-          if (token !== '123456') {
-            return { data: { session: null, user: null }, error: new Error('Invalid OTP. Please enter 123456.') }
+        verifyOtp: async ({ phone, email, token }: { phone?: string; email?: string; token: string }) => {
+          const target = phone || email
+          if (!target || !token) return { error: new Error('Target (email/phone) and OTP token are required') }
+
+          // Retrieve dynamic OTP from state/localStorage
+          let storedOtp = null
+          if (typeof window !== 'undefined') {
+            storedOtp = localStorage.getItem(`mock-otp-${target}`)
           }
-          const cleanPhone = phone.replace(/\D/g, '')
+
+          if (!storedOtp) {
+            return { data: { session: null, user: null }, error: new Error('No OTP requested or OTP has expired.') }
+          }
+
+          if (token !== storedOtp) {
+            return { data: { session: null, user: null }, error: new Error('Invalid OTP. Verification failed.') }
+          }
+
+          // Delete stored OTP on successful match
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem(`mock-otp-${target}`)
+          }
+
+          const cleanPhone = phone ? phone.replace(/\D/g, '') : ''
           const isAdminPhone = cleanPhone === '9595579336' || cleanPhone === '9999999999'
-          const userId = isAdminPhone ? 'mock-uuid-1234-5678' : `user-uuid-phone-${Math.random().toString(36).slice(2, 11)}`
-          const role = isAdminPhone ? 'admin' : 'customer'
-          
-          let fullName = isAdminPhone ? 'Rahul Sharma' : `Phone User ${cleanPhone.slice(-4)}`
-          if (localOtpNamesMap[phone]) {
-            fullName = localOtpNamesMap[phone]
-          } else if (typeof global !== 'undefined' && (global as any)._otpNames && (global as any)._otpNames[phone]) {
-            fullName = (global as any)._otpNames[phone]
-          } else if (typeof window !== 'undefined' && (window as any)._otpNames && (window as any)._otpNames[phone]) {
-            fullName = (window as any)._otpNames[phone]
+          const isAdminEmail = email ? (email.toLowerCase() === 'admin@fruitdabba.com' || email.toLowerCase() === 'admin@gmail.com') : false
+          const isAdmin = isAdminPhone || isAdminEmail
+
+          const userId = isAdmin ? 'mock-uuid-1234-5678' : `user-uuid-${Math.random().toString(36).slice(2, 11)}`
+          const role = isAdmin ? 'admin' : 'customer'
+
+          let fullName = isAdmin ? 'Rahul Sharma' : (email ? email.split('@')[0] : `Phone User ${cleanPhone.slice(-4)}`)
+          if (localOtpNamesMap[target]) {
+            fullName = localOtpNamesMap[target]
+          } else if (typeof global !== 'undefined' && (global as any)._otpNames && (global as any)._otpNames[target]) {
+            fullName = (global as any)._otpNames[target]
+          } else if (typeof window !== 'undefined' && (window as any)._otpNames && (window as any)._otpNames[target]) {
+            fullName = (window as any)._otpNames[target]
           }
 
           const mockUser = {
             id: userId,
-            email: `${cleanPhone}@phone.fruitdabba.local`,
-            phone: phone,
+            email: email || `${cleanPhone}@phone.fruitdabba.local`,
+            phone: phone || null,
             role: role,
             user_metadata: {
               full_name: fullName,
               role: role,
-              phone: phone
+              phone: phone || null
             }
           }
 
@@ -438,7 +471,7 @@ export function createClient() {
                   id: userId,
                   full_name: fullName,
                   email: mockUser.email,
-                  phone: phone,
+                  phone: phone || null,
                   role: role,
                   created_at: new Date().toISOString()
                 }

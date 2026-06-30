@@ -48,7 +48,7 @@ export default async function OrdersPage() {
             <h1 className="text-3xl font-bold text-gray-900">My Orders</h1>
             <p className="text-gray-500 mt-1">{orders?.length || 0} total orders</p>
           </div>
-          <Link href="/products" className="btn-outline text-sm py-2 px-4">
+          <Link href="/" className="btn-outline text-sm py-2 px-4">
             Shop Again
           </Link>
         </div>
@@ -58,7 +58,7 @@ export default async function OrdersPage() {
             <div className="text-7xl mb-6">📦</div>
             <h2 className="text-2xl font-bold text-gray-700">No orders yet</h2>
             <p className="text-gray-400 mt-2 mb-8">Your orders will appear here once you make a purchase.</p>
-            <Link href="/products" className="btn-primary inline-flex items-center gap-2">
+            <Link href="/" className="btn-primary inline-flex items-center gap-2">
               <Package size={18} /> Start Shopping
             </Link>
           </div>

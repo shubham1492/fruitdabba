@@ -32,7 +32,7 @@ const previewItems = [
 
 export default function WeeklyBoxPreview() {
   return (
-    <section id="fruit-box" className="py-16 sm:py-24 bg-white">
+    <section id="fruit-box" className="pt-10 pb-16 sm:pt-14 sm:pb-20 bg-white">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex max-w-2xl flex-col gap-3 mx-auto items-center text-center">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">

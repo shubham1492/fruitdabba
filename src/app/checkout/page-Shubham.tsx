@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Loader2, MapPin,
   Calendar, Clock,
-  Smartphone, CreditCard, Truck, CheckCircle2, Gift, Lock
+  Smartphone, CreditCard, Truck, CheckCircle2, Gift, Lock, Mail, X
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
@@ -85,6 +85,10 @@ export default function CheckoutPage() {
   const [authLoading, setAuthLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
 
+  const [showAuthOverlay, setShowAuthOverlay] = useState(false)
+  const isSubmittingRef = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
+
   // Delivery schedule
   const tomorrow = new Date()
   tomorrow.setDate(tomorrow.getDate() + 1)
@@ -99,32 +103,6 @@ export default function CheckoutPage() {
 
   // Referral
   const [referralCode, setReferralCode] = useState('')
-
-  // Promo code
-  const [promoInput, setPromoInput] = useState('')
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number; label: string } | null>(null)
-  const [promoError, setPromoError] = useState('')
-
-  const PROMO_CODES: Record<string, { discount: number; label: string }> = {
-    FIRSTBOX30: { discount: 0.30, label: '30% off first box' },
-    FRUITLOVE: { discount: 0.15, label: '15% off your order' },
-  }
-
-  const handleApplyPromo = () => {
-    const code = promoInput.trim().toUpperCase()
-    if (!code) { setPromoError('Enter a promo code'); return }
-    const found = PROMO_CODES[code]
-    if (!found) { setPromoError('Invalid promo code'); setAppliedPromo(null); return }
-    setAppliedPromo({ code, ...found })
-    setPromoError('')
-    setPromoInput('')
-  }
-
-  const handleRemovePromo = () => {
-    setAppliedPromo(null)
-    setPromoError('')
-    setPromoInput('')
-  }
 
   const [form, setForm] = useState({
     name: '', phone: '', line1: '', line2: '', city: '', state: '', pincode: '',
@@ -149,77 +127,114 @@ export default function CheckoutPage() {
     }
   }, [])
 
+  // Load from local storage on mount
+  useEffect(() => {
+    const savedForm = localStorage.getItem('fd_checkout_form')
+    if (savedForm) {
+      try {
+        setForm(JSON.parse(savedForm))
+      } catch (e) {
+        console.error(e)
+      }
+    }
+    const savedSchedule = localStorage.getItem('fd_checkout_schedule')
+    if (savedSchedule) {
+      try {
+        const { startDate: sd, timeSlot: ts, carryForward: cf, paymentMethod: pm } = JSON.parse(savedSchedule)
+        if (sd) setStartDate(sd)
+        if (ts) setTimeSlot(ts)
+        if (cf !== undefined) setCarryForward(cf)
+        if (pm) setPaymentMethod(pm)
+      } catch (e) {
+        console.error(e)
+      }
+    }
+  }, [])
+
   useEffect(() => {
     let mounted = true
     async function checkUser() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!mounted) return
-      if (!user) { setAuthNeeded(true); setAuthChecked(true); return }
-      setUser({ id: user.id, email: user.email })
+      if (!user) {
+        setAuthChecked(true)
+        return
+      }
+      const activeUser = { id: user.id, email: user.email }
+      setUser(activeUser)
       setForm((f) => ({ ...f, name: f.name || user.user_metadata?.full_name || '', phone: f.phone || user.user_metadata?.phone || '' }))
-      setAuthNeeded(false); setAuthChecked(true)
+      setAuthChecked(true)
       if (planId) loadPlan(planId)
+
+      // If we have a pending submit from Google OAuth redirect, execute it
+      const pendingSubmit = localStorage.getItem('fd_checkout_pending_submit')
+      if (pendingSubmit === 'true') {
+        localStorage.removeItem('fd_checkout_pending_submit')
+        setTimeout(() => {
+          executeOrder(activeUser)
+        }, 200)
+      }
     }
     checkUser()
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event: any, session: any) => {
       if (!mounted) return
       if (session?.user) {
         const u = session.user
-        setUser({ id: u.id, email: u.email })
+        const activeUser = { id: u.id, email: u.email }
+        setUser(activeUser)
         setForm((f) => ({ ...f, name: f.name || u.user_metadata?.full_name || '', phone: f.phone || u.user_metadata?.phone || '' }))
-        setAuthNeeded(false); setAuthChecked(true)
+        setAuthChecked(true)
         if (planId) loadPlan(planId)
         // Register for push notifications after login
         registerForPushNotifications(u.id).catch(() => {})
-      } else { setUser(null); setAuthNeeded(true); setAuthChecked(true) }
+      } else {
+        setUser(null)
+        setAuthChecked(true)
+      }
     })
     return () => { mounted = false; subscription.unsubscribe() }
   }, [planId, loadPlan])
 
-  useEffect(() => {
-    const saved = localStorage.getItem('selected_city') || 'Bangalore'
-    setForm((f) => ({ ...f, city: f.city || saved }))
-
-    const handleCityChanged = (e: Event) => {
-      const newCity = (e as CustomEvent).detail
-      setForm((f) => ({ ...f, city: newCity }))
-    }
-    window.addEventListener('cityChanged', handleCityChanged)
-    return () => window.removeEventListener('cityChanged', handleCityChanged)
-  }, [])
-
-  const handleInlineAuth = async (e: React.FormEvent) => {
-    e.preventDefault(); setAuthLoading(true)
-    try {
-      if (authMode === 'register') {
-        const { error } = await supabase.auth.signUp({ email: authEmail, password: authPassword, options: { data: { full_name: authName }, emailRedirectTo: `${window.location.origin}/auth/callback?next=/checkout${planId ? `%3Fplan%3D${planId}` : ''}` } })
-        if (error) throw error
-        toast.success('Sign up successful! Please check your email.')
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword })
-        if (error) throw error
-        toast.success('Welcome back!')
-      }
-    } catch (err: any) { toast.error(err.message || 'Authentication failed') }
-    finally { setAuthLoading(false) }
-  }
-
   const handleInlineRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!authName || authName.trim().length < 2) {
+    
+    const needsName = authMethod === 'mobile' || authMode === 'register'
+    if (needsName && (!authName || authName.trim().length < 2)) {
       toast.error('Please enter your full name')
       return
     }
-    if (!authPhone || authPhone.length < 10) {
-      toast.error('Please enter a valid 10-digit mobile number')
-      return
+
+    if (authMethod === 'mobile') {
+      if (!authPhone || authPhone.length < 10) {
+        toast.error('Please enter a valid 10-digit mobile number')
+        return
+      }
+    } else {
+      if (!authEmail || !authEmail.includes('@')) {
+        toast.error('Please enter a valid email address')
+        return
+      }
     }
+
     setAuthOtpLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: `+91${authPhone}`,
-        options: { data: { full_name: authName } }
-      })
+      const signInParams: any = {
+        options: {
+          data: {}
+        }
+      }
+      if (needsName) {
+        signInParams.options.data.full_name = authName
+      }
+      
+      if (authMethod === 'mobile') {
+        signInParams.phone = `+91${authPhone}`
+      } else {
+        signInParams.email = authEmail
+        signInParams.options.emailRedirectTo = `${window.location.origin}/auth/callback?next=/checkout${planId ? `%3Fplan%3D${planId}` : ''}`
+      }
+
+      const { error } = await supabase.auth.signInWithOtp(signInParams)
       if (error) throw error
       setAuthOtpSent(true)
       toast.success('OTP sent successfully!')
@@ -238,12 +253,31 @@ export default function CheckoutPage() {
     }
     setAuthLoading(true)
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: `+91${authPhone}`,
+      const verifyParams: any = {
         token: authOtp,
-      })
+      }
+      if (authMethod === 'mobile') {
+        verifyParams.phone = `+91${authPhone}`
+        verifyParams.type = 'sms'
+      } else {
+        verifyParams.email = authEmail
+        verifyParams.type = 'email'
+      }
+
+      const { data: { user: verifiedUser }, error } = await supabase.auth.verifyOtp(verifyParams)
       if (error) throw error
       toast.success('Welcome back!')
+      
+      setShowAuthOverlay(false)
+
+      if (verifiedUser) {
+        const activeUser = { id: verifiedUser.id, email: verifiedUser.email }
+        setUser(activeUser)
+        if (isSubmittingRef.current) {
+          isSubmittingRef.current = false
+          await executeOrder(activeUser)
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || 'OTP verification failed')
     } finally {
@@ -258,7 +292,14 @@ export default function CheckoutPage() {
 
   const handleGoogleSSO = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: `${window.location.origin}/auth/callback?next=/checkout${planId ? `%3Fplan%3D${planId}` : ''}` } })
+      localStorage.setItem('fd_checkout_form', JSON.stringify(form))
+      localStorage.setItem('fd_checkout_schedule', JSON.stringify({ startDate, timeSlot, carryForward, paymentMethod }))
+      localStorage.setItem('fd_checkout_pending_submit', 'true')
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback?next=/checkout${planId ? `%3Fplan%3D${planId}` : ''}` }
+      })
       if (error) throw error
     } catch (err: any) { toast.error(err.message || 'Google authentication failed') }
   }
@@ -284,28 +325,42 @@ export default function CheckoutPage() {
   }
 
   const subtotal = getSubtotal()
-  const promoDiscount = appliedPromo ? Math.round(subtotal * appliedPromo.discount) : 0
-  const discountedSubtotal = subtotal - promoDiscount
-  const gst = Math.round(discountedSubtotal * 0.05)
-  const delivery = selectedPlan ? 0 : (discountedSubtotal >= 500 ? 0 : 49)
-  const total = discountedSubtotal + delivery + gst
+  const gst = Math.round(subtotal * 0.05)
+  const delivery = selectedPlan ? 0 : (subtotal >= 500 ? 0 : 49)
+  const total = subtotal + delivery + gst
 
-  const loadRazorpay = () =>
-    new Promise((resolve) => {
-      if (window.Razorpay) { resolve(true); return }
-      const script = document.createElement('script')
-      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
-      script.onload = () => resolve(true)
-      script.onerror = () => resolve(false)
-      document.body.appendChild(script)
-    })
+  const checkoutData = { form, startDate, timeSlot, carryForward, paymentMethod, referralCode, total, subtotal, delivery, gst, items, selectedPlan, likes, dislikes, deliverySlotParam, categories, portionAdjustment }
+  const checkoutDataRef = useRef(checkoutData)
+  
+  useEffect(() => {
+    checkoutDataRef.current = checkoutData
+  })
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!selectedPlan && items.length === 0) { toast.error('Your cart is empty!'); return }
+  async function executeOrder(activeUser: { id: string; email: string | undefined }) {
+    const {
+      form: currentForm,
+      startDate: currentStartDate,
+      timeSlot: currentTimeSlot,
+      carryForward: currentCarryForward,
+      paymentMethod: currentPaymentMethod,
+      referralCode: currentReferralCode,
+      total: currentTotal,
+      subtotal: currentSubtotal,
+      delivery: currentDelivery,
+      gst: currentGst,
+      items: currentItems,
+      selectedPlan: currentSelectedPlan,
+      likes: currentLikes,
+      dislikes: currentDislikes,
+      deliverySlotParam: currentDeliverySlotParam,
+      categories: currentCategories,
+      portionAdjustment: currentPortionAdjustment,
+    } = checkoutDataRef.current
+
+    if (!currentSelectedPlan && currentItems.length === 0) { toast.error('Your cart is empty!'); return }
 
     // COD flow — no payment gateway
-    if (paymentMethod === 'cod') {
+    if (currentPaymentMethod === 'cod') {
       setLoading(true)
       try {
         const verify = await fetch('/api/razorpay/verify', {
@@ -314,27 +369,29 @@ export default function CheckoutPage() {
             razorpay_order_id: `cod_${Date.now()}`,
             razorpay_payment_id: `cod_${Date.now()}`,
             razorpay_signature: 'cod',
-            cartItems: selectedPlan ? [] : items,
-            planId: selectedPlan?.id || null,
-            planDurationDays: selectedPlan?.duration_days || null,
-            address: form, total: total - gst, subtotal, delivery,
-            userId: user?.id,
+            cartItems: currentSelectedPlan ? [] : currentItems,
+            planId: currentSelectedPlan?.id || null,
+            planDurationDays: currentSelectedPlan?.duration_days || null,
+            address: currentForm, total: currentTotal - currentGst, subtotal: currentSubtotal, delivery: currentDelivery,
+            userId: activeUser.id,
             paymentMethod: 'cod',
-            startDate, timeSlot, carryForward,
-            preferences: { likes, dislikes, deliverySlot: deliverySlotParam, categories, portionAdjustment }
+            startDate: currentStartDate, timeSlot: currentTimeSlot, carryForward: currentCarryForward,
+            preferences: { likes: currentLikes, dislikes: currentDislikes, deliverySlot: currentDeliverySlotParam, categories: currentCategories, portionAdjustment: currentPortionAdjustment }
           }),
         })
         const result = await verify.json()
         if (result.success) {
-          if (!selectedPlan) clearCart()
+          if (!currentSelectedPlan) clearCart()
+          localStorage.removeItem('fd_checkout_form')
+          localStorage.removeItem('fd_checkout_schedule')
           // Apply referral code if provided
-          if (referralCode && user?.id) {
-            await applyReferralCode(referralCode, user.id, result.orderId).catch(() => {})
+          if (currentReferralCode && activeUser.id) {
+            await applyReferralCode(currentReferralCode, activeUser.id, result.orderId).catch(() => {})
           }
           // Send invoice email
           await fetch('/api/invoice/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: result.orderId, email: user?.email })
+            body: JSON.stringify({ orderId: result.orderId, email: activeUser.email })
           })
           toast.success('Order placed! Invoice emailed to you 📧')
           router.push(`/invoice/${result.orderId}`)
@@ -357,22 +414,24 @@ export default function CheckoutPage() {
             razorpay_order_id: `mock_order_${Date.now()}`,
             razorpay_payment_id: `mock_payment_${Date.now()}`,
             razorpay_signature: `mock_sig_${Date.now()}`,
-            cartItems: selectedPlan ? [] : items,
-            planId: selectedPlan?.id || null,
-            planDurationDays: selectedPlan?.duration_days || null,
-            address: form, total, subtotal, delivery, userId: user?.id,
-            paymentMethod, startDate, timeSlot, carryForward,
-            preferences: { likes, dislikes, deliverySlot: deliverySlotParam, categories, portionAdjustment }
+            cartItems: currentSelectedPlan ? [] : currentItems,
+            planId: currentSelectedPlan?.id || null,
+            planDurationDays: currentSelectedPlan?.duration_days || null,
+            address: currentForm, total: currentTotal, subtotal: currentSubtotal, delivery: currentDelivery, userId: activeUser.id,
+            paymentMethod: currentPaymentMethod, startDate: currentStartDate, timeSlot: currentTimeSlot, carryForward: currentCarryForward,
+            preferences: { likes: currentLikes, dislikes: currentDislikes, deliverySlot: currentDeliverySlotParam, categories: currentCategories, portionAdjustment: currentPortionAdjustment }
           }),
         })
         const result = await verify.json()
         if (result.success) {
-          if (!selectedPlan) clearCart()
+          if (!currentSelectedPlan) clearCart()
+          localStorage.removeItem('fd_checkout_form')
+          localStorage.removeItem('fd_checkout_schedule')
           await fetch('/api/invoice/send', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderId: result.orderId, email: user?.email })
+            body: JSON.stringify({ orderId: result.orderId, email: activeUser.email })
           })
-          toast.success(selectedPlan ? 'Subscription activated! Invoice emailed 📧' : 'Order placed! Invoice emailed 📧')
+          toast.success(currentSelectedPlan ? 'Subscription activated! Invoice emailed 📧' : 'Order placed! Invoice emailed 📧')
           router.push(`/invoice/${result.orderId}`)
         } else { toast.error(result.error || 'Payment verification failed') }
         setLoading(false); return
@@ -382,36 +441,38 @@ export default function CheckoutPage() {
       if (!loaded) throw new Error('Razorpay SDK failed to load')
       const res = await fetch('/api/razorpay/create-order', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: total, currency: 'INR' }),
+        body: JSON.stringify({ amount: currentTotal, currency: 'INR' }),
       })
       const { orderId: rzpOrderId, amount: rzpAmount, currency } = await res.json()
 
       const options = {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: rzpAmount, currency,
-        name: 'FruitDabba', description: selectedPlan ? `Subscription – ${selectedPlan.name}` : 'FruitDabba Order',
+        name: 'FruitDabba', description: currentSelectedPlan ? `Subscription – ${currentSelectedPlan.name}` : 'FruitDabba Order',
         order_id: rzpOrderId,
-        prefill: { name: form.name, email: user?.email, contact: form.phone },
+        prefill: { name: currentForm.name, email: activeUser.email, contact: currentForm.phone },
         theme: { color: '#22c55e' },
         handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
           const verify = await fetch('/api/razorpay/verify', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...response,
-              cartItems: selectedPlan ? [] : items,
-              planId: selectedPlan?.id || null,
-              planDurationDays: selectedPlan?.duration_days || null,
-              address: form, total, subtotal, delivery, userId: user?.id,
-              paymentMethod, startDate, timeSlot, carryForward,
-              preferences: { likes, dislikes, deliverySlot: deliverySlotParam, categories, portionAdjustment }
+              cartItems: currentSelectedPlan ? [] : currentItems,
+              planId: currentSelectedPlan?.id || null,
+              planDurationDays: currentSelectedPlan?.duration_days || null,
+              address: currentForm, total: currentTotal, subtotal: currentSubtotal, delivery: currentDelivery, userId: activeUser.id,
+              paymentMethod: currentPaymentMethod, startDate: currentStartDate, timeSlot: currentTimeSlot, carryForward: currentCarryForward,
+              preferences: { likes: currentLikes, dislikes: currentDislikes, deliverySlot: currentDeliverySlotParam, categories: currentCategories, portionAdjustment: currentPortionAdjustment }
             }),
           })
           const result = await verify.json()
           if (result.success) {
-            if (!selectedPlan) clearCart()
+            if (!currentSelectedPlan) clearCart()
+            localStorage.removeItem('fd_checkout_form')
+            localStorage.removeItem('fd_checkout_schedule')
             await fetch('/api/invoice/send', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ orderId: result.orderId, email: user?.email })
+              body: JSON.stringify({ orderId: result.orderId, email: activeUser.email })
             })
             toast.success('Payment successful! Invoice emailed 📧')
             router.push(`/invoice/${result.orderId}`)
@@ -426,185 +487,55 @@ export default function CheckoutPage() {
     }
   }
 
+  const loadRazorpay = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) { resolve(true); return }
+      const script = document.createElement('script')
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js'
+      script.onload = () => resolve(true)
+      script.onerror = () => resolve(false)
+      document.body.appendChild(script)
+    })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedPlan && items.length === 0) { toast.error('Your cart is empty!'); return }
+
+    if (!user) {
+      if (!formRef.current?.checkValidity()) {
+        formRef.current?.reportValidity()
+        return
+      }
+
+      localStorage.setItem('fd_checkout_form', JSON.stringify(form))
+      localStorage.setItem('fd_checkout_schedule', JSON.stringify({ startDate, timeSlot, carryForward, paymentMethod }))
+
+      if (form.name && !authName) setAuthName(form.name)
+      if (form.phone && !authPhone) {
+        const cleanPhone = form.phone.replace(/\D/g, '').slice(-10)
+        setAuthPhone(cleanPhone)
+      }
+
+      isSubmittingRef.current = true
+      setShowAuthOverlay(true)
+      return
+    }
+
+    await executeOrder(user)
+  }
+
   const updateForm = (field: string, value: string) => setForm((f) => ({ ...f, [field]: value }))
 
   if (!authChecked || fetchingPlan) {
     return <div className="min-h-screen bg-cream flex items-center justify-center pt-24"><Loader2 className="animate-spin text-forest" size={32} /></div>
   }
 
-  if (authNeeded) {
-    return (
-      <div className="min-h-screen bg-cream pt-24 flex items-center justify-center p-4">
-        <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 my-8">
-          <div className="bg-gradient-to-r from-forest to-forest-light p-8 text-white text-center">
-            <div className="text-4xl mb-2">🍊</div>
-            <h2 className="text-2xl font-bold">FruitDabba Checkout</h2>
-            <p className="text-white/70 text-sm mt-1">Sign in to finalize your fresh subscription!</p>
-          </div>
-          <div className="p-8">
-            <div className="flex bg-cream rounded-2xl p-1 mb-6">
-              {(['login', 'register'] as const).map((m) => (
-                <button key={m} type="button" onClick={() => { setAuthMode(m); setAuthPhone(''); setAuthOtp(''); setAuthOtpSent(false); }}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${authMode === m ? 'bg-forest text-white shadow-md' : 'text-gray-550 hover:text-gray-700'}`}>
-                  {m === 'login' ? 'Sign In' : 'Sign Up'}
-                </button>
-              ))}
-            </div>
 
-            {/* Sub-tab for email vs mobile login */}
-            {authMode === 'login' && (
-              <div className="flex justify-center gap-6 mb-6 border-b border-gray-100 pb-3">
-                <button
-                  type="button"
-                  onClick={() => setAuthMethod('email')}
-                  className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
-                    authMethod === 'email'
-                      ? 'border-forest text-forest font-extrabold'
-                      : 'border-transparent text-gray-400 hover:text-gray-600'
-                  }`}
-                >
-                  📧 Email Login
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setAuthMethod('mobile')}
-                  className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
-                    authMethod === 'mobile'
-                      ? 'border-forest text-forest font-extrabold'
-                      : 'border-transparent text-gray-400 hover:text-gray-650'
-                  }`}
-                >
-                  📱 Mobile Login (OTP)
-                </button>
-              </div>
-            )}
-
-            {authMode === 'login' && authMethod === 'mobile' ? (
-              /* Phone OTP Login UI */
-              !authOtpSent ? (
-                <form onSubmit={handleInlineRequestOtp} className="space-y-4">
-                  <div>
-                    <label className="text-xs font-bold text-gray-550 mb-1.5 block">Full Name</label>
-                    <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
-                      <input
-                        type="text"
-                        placeholder="Enter your full name"
-                        value={authName}
-                        onChange={(e) => setAuthName(e.target.value)}
-                        required
-                        className="input pl-11 py-2.5 text-sm font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs font-bold text-gray-550 mb-1.5 block">Mobile Number</label>
-                    <div className="relative">
-                      <Smartphone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <span className="absolute left-10 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-655">+91</span>
-                      <input
-                        type="tel"
-                        placeholder="Enter 10-digit mobile number"
-                        value={authPhone}
-                        onChange={(e) => setAuthPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        required
-                        pattern="[0-9]{10}"
-                        className="input pl-20 py-2.5 text-sm font-medium"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={authOtpLoading || authPhone.length !== 10 || !authName.trim()}
-                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {authOtpLoading && <Loader2 size={16} className="animate-spin" />}
-                    Send OTP Code
-                  </button>
-                </form>
-              ) : (
-                <form onSubmit={handleInlineVerifyOtp} className="space-y-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-1.5">
-                      <label className="text-xs font-bold text-gray-550 block">Verification Code</label>
-                      <button
-                        type="button"
-                        onClick={handleInlineResetPhone}
-                        className="text-xs text-forest hover:underline font-bold cursor-pointer"
-                      >
-                        Change Number
-                      </button>
-                    </div>
-                    <div className="relative">
-                      <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                      <input
-                        type="text"
-                        placeholder="Enter 6-digit OTP (e.g. 123456)"
-                        value={authOtp}
-                        onChange={(e) => setAuthOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        required
-                        pattern="[0-9]{6}"
-                        className="input pl-11 py-2.5 text-sm font-mono tracking-widest text-center"
-                      />
-                    </div>
-                    <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-                      Enter the code received via SMS (use **123456** in local testing).
-                    </p>
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={authLoading || authOtp.length !== 6}
-                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
-                  >
-                    {authLoading && <Loader2 size={16} className="animate-spin" />}
-                    Verify & Sign In
-                  </button>
-                </form>
-              )
-            ) : (
-              /* Email Auth Form */
-              <form onSubmit={handleInlineAuth} className="space-y-4">
-                {authMode === 'register' && (
-                  <div className="relative">
-                    <input type="text" placeholder="Full Name" value={authName} onChange={(e) => setAuthName(e.target.value)} required className="input pl-11 py-2.5 text-sm" />
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
-                  </div>
-                )}
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">✉️</span>
-                  <input type="email" placeholder="Email address" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} required className="input pl-11 py-2.5 text-sm" />
-                </div>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">🔒</span>
-                  <input type={showPass ? 'text' : 'password'} placeholder="Password" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} required minLength={6} className="input pl-11 pr-11 py-2.5 text-sm" />
-                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">{showPass ? '🙈' : '👁️'}</button>
-                </div>
-                <button type="submit" disabled={authLoading} className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2">
-                  {authLoading && <Loader2 size={16} className="animate-spin" />}
-                  {authMode === 'login' ? 'Sign In' : 'Create Account'}
-                </button>
-              </form>
-            )}
-
-            <div className="flex items-center gap-3 my-5"><div className="flex-1 h-px bg-gray-100" /><span className="text-gray-400 text-xs">or</span><div className="flex-1 h-px bg-gray-100" /></div>
-            <button type="button" onClick={handleGoogleSSO} className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-xl py-2.5 px-4 hover:bg-gray-50 transition-colors font-medium text-gray-700 text-sm">
-              <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
-              Google (Gmail)
-            </button>
-            <div className="mt-6 text-center"><Link href="/products" className="text-sm font-semibold text-forest hover:underline">← Continue Shopping</Link></div>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return (
     <div className="min-h-screen bg-cream pt-24">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        <form onSubmit={handleSubmit}>
+        <form ref={formRef} onSubmit={handleSubmit}>
           <div className="grid lg:grid-cols-3 gap-8">
 
             {/* ── Left column ── */}
@@ -860,43 +791,6 @@ export default function CheckoutPage() {
                     </div>
                   )}
 
-                  {/* Promo Code */}
-                  <div className="border-t border-gray-100 pt-3">
-                    {appliedPromo ? (
-                      <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
-                        <div>
-                          <div className="text-xs font-extrabold text-green-700">🎉 {appliedPromo.code}</div>
-                          <div className="text-[10px] text-green-600">{appliedPromo.label} applied!</div>
-                        </div>
-                        <button type="button" onClick={handleRemovePromo} className="text-[10px] text-red-400 hover:text-red-600 font-bold underline cursor-pointer">
-                          Remove
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Promo Code</label>
-                        <div className="flex gap-2">
-                          <input
-                            type="text"
-                            value={promoInput}
-                            onChange={(e) => { setPromoInput(e.target.value.toUpperCase()); setPromoError('') }}
-                            onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), handleApplyPromo())}
-                            placeholder="e.g. FIRSTBOX30"
-                            className="input text-xs py-2 flex-1 uppercase tracking-widest font-bold"
-                          />
-                          <button
-                            type="button"
-                            onClick={handleApplyPromo}
-                            className="px-3 py-2 bg-gray-900 hover:bg-gray-700 text-white text-xs font-extrabold rounded-xl transition-colors cursor-pointer shrink-0"
-                          >
-                            Apply
-                          </button>
-                        </div>
-                        {promoError && <p className="text-[10px] text-red-500 font-semibold">{promoError}</p>}
-                      </div>
-                    )}
-                  </div>
-
                   {/* Price breakdown */}
                   <div className="border-t border-gray-100 pt-3 space-y-2 text-sm">
                     <div className="flex justify-between text-gray-600">
@@ -905,12 +799,6 @@ export default function CheckoutPage() {
                     {portionAdjustment === 'reduced' && (
                       <div className="flex justify-between text-amber-600 font-bold">
                         <span>Portion Discount</span><span>-₹300</span>
-                      </div>
-                    )}
-                    {appliedPromo && (
-                      <div className="flex justify-between text-green-600 font-bold">
-                        <span>Promo ({appliedPromo.code})</span>
-                        <span>-₹{promoDiscount.toLocaleString()}</span>
                       </div>
                     )}
                     <div className="flex justify-between text-gray-600">
@@ -922,12 +810,7 @@ export default function CheckoutPage() {
                     </div>
                     <div className="flex justify-between font-extrabold text-gray-900 text-base pt-2 border-t border-gray-100">
                       <span>Total</span>
-                      <div className="text-right">
-                        {appliedPromo && (
-                          <div className="text-xs text-gray-400 line-through">₹{(subtotal + delivery + Math.round(subtotal * 0.05)).toLocaleString()}</div>
-                        )}
-                        <span className="text-[#22c55e]">₹{total.toLocaleString()}</span>
-                      </div>
+                      <span className="text-[#22c55e]">₹{total.toLocaleString()}</span>
                     </div>
                     {selectedPlan && (
                       <p className="text-[10px] text-gray-400">Billed per month · cancel anytime</p>
@@ -944,7 +827,7 @@ export default function CheckoutPage() {
                     {loading ? (
                       <><Loader2 size={16} className="animate-spin" /> Processing…</>
                     ) : (
-                      <>Place subscription · ₹{total.toLocaleString()}{appliedPromo ? ' 🎉' : ''} →</>
+                      <>Place subscription · ₹{total.toLocaleString()} →</>
                     )}
                   </button>
 
@@ -957,6 +840,184 @@ export default function CheckoutPage() {
           </div>
         </form>
       </div>
+
+      {/* Auth Modal Overlay */}
+      {showAuthOverlay && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm transition-opacity">
+          <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden border border-gray-100 animate-in fade-in zoom-in-95 duration-200">
+            {/* Close button */}
+            <button
+              type="button"
+              onClick={() => {
+                setShowAuthOverlay(false)
+                isSubmittingRef.current = false
+              }}
+              className="absolute right-4 top-4 z-10 w-8 h-8 rounded-full bg-black/10 hover:bg-black/20 flex items-center justify-center text-gray-500 transition-colors cursor-pointer"
+            >
+              <X size={16} />
+            </button>
+
+            <div className="bg-gradient-to-r from-forest to-forest-light p-8 text-white text-center">
+              <div className="text-4xl mb-2">🍊</div>
+              <h2 className="text-2xl font-bold">FruitDabba Checkout</h2>
+              <p className="text-white/70 text-sm mt-1">Sign in to finalize your fresh subscription!</p>
+            </div>
+            
+            <div className="p-8">
+              {/* Tab Selector */}
+              <div className="flex bg-cream rounded-2xl p-1 mb-6">
+                {(['login', 'register'] as const).map((m) => (
+                  <button key={m} type="button" onClick={() => { setAuthMode(m); setAuthPhone(''); setAuthOtp(''); setAuthOtpSent(false); }}
+                    className={`flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${authMode === m ? 'bg-forest text-white shadow-md' : 'text-gray-550 hover:text-gray-700'}`}>
+                    {m === 'login' ? 'Sign In' : 'Sign Up'}
+                  </button>
+                ))}
+              </div>
+
+              {/* Sub-tab for email vs mobile */}
+              <div className="flex justify-center gap-6 mb-6 border-b border-gray-100 pb-3">
+                <button
+                  type="button"
+                  onClick={() => { setAuthMethod('email'); setAuthOtpSent(false); setAuthOtp(''); }}
+                  className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
+                    authMethod === 'email'
+                      ? 'border-forest text-forest font-extrabold'
+                      : 'border-transparent text-gray-450 hover:text-gray-655'
+                  }`}
+                >
+                  📧 Email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAuthMethod('mobile'); setAuthOtpSent(false); setAuthOtp(''); }}
+                  className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
+                    authMethod === 'mobile'
+                      ? 'border-forest text-forest font-extrabold'
+                      : 'border-transparent text-gray-450 hover:text-gray-655'
+                  }`}
+                >
+                  📱 Mobile
+                </button>
+              </div>
+
+              {authOtpSent ? (
+                /* OTP Verification UI (Shared) */
+                <form onSubmit={handleInlineVerifyOtp} className="space-y-4">
+                  <div>
+                    <div className="flex justify-between items-center mb-1.5">
+                      <label className="text-xs font-bold text-gray-555 block">Verification Code</label>
+                      <button
+                        type="button"
+                        onClick={handleInlineResetPhone}
+                        className="text-xs text-forest hover:underline font-bold cursor-pointer"
+                      >
+                        Change {authMethod === 'email' ? 'Email' : 'Number'}
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Enter 6-digit OTP"
+                        value={authOtp}
+                        onChange={(e) => setAuthOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        required
+                        pattern="[0-9]{6}"
+                        className="input pl-11 py-2.5 text-sm font-mono tracking-widest text-center"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+                      Enter the code received via {authMethod === 'email' ? 'email' : 'SMS'} (check browser toast notifications in local dev).
+                    </p>
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={authLoading || authOtp.length !== 6}
+                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {authLoading && <Loader2 size={16} className="animate-spin" />}
+                    Verify & Sign In
+                  </button>
+                </form>
+              ) : (
+                /* OTP Request UI */
+                <form onSubmit={handleInlineRequestOtp} className="space-y-4">
+                  {(authMethod === 'mobile' || authMode === 'register') && (
+                    <div>
+                      <label className="text-xs font-bold text-gray-500 mb-1.5 block">Full Name</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
+                        <input
+                          type="text"
+                          placeholder="Enter your full name"
+                          value={authName}
+                          onChange={(e) => setAuthName(e.target.value)}
+                          required
+                          className="input pl-11 py-2.5 text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {authMethod === 'mobile' ? (
+                    <div>
+                      <label className="text-xs font-bold text-gray-550 mb-1.5 block">Mobile Number</label>
+                      <div className="relative">
+                        <Smartphone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <span className="absolute left-10 top-1/2 -translate-y-1/2 text-sm font-bold text-gray-655">+91</span>
+                        <input
+                          type="tel"
+                          placeholder="Enter 10-digit mobile number"
+                          value={authPhone}
+                          onChange={(e) => setAuthPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          required
+                          pattern="[0-9]{10}"
+                          className="input pl-20 py-2.5 text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs font-bold text-gray-555 block mb-1.5">Email Address</label>
+                      <div className="relative">
+                        <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                          type="email"
+                          placeholder="Enter email address"
+                          value={authEmail}
+                          onChange={(e) => setAuthEmail(e.target.value)}
+                          required
+                          className="input pl-11 py-2.5 text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={
+                      authOtpLoading || 
+                      (authMethod === 'mobile' && (authPhone.length !== 10 || !authName.trim())) ||
+                      (authMethod === 'email' && (!authEmail.trim() || (authMode === 'register' && !authName.trim())))
+                    }
+                    className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
+                  >
+                    {authOtpLoading && <Loader2 size={16} className="animate-spin" />}
+                    Send OTP Code
+                  </button>
+                </form>
+              )}
+
+              <div className="flex items-center gap-3 my-5"><div className="flex-1 h-px bg-gray-100" /><span className="text-gray-400 text-xs">or</span><div className="flex-1 h-px bg-gray-100" /></div>
+              <button type="button" onClick={handleGoogleSSO} className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-xl py-2.5 px-4 hover:bg-gray-50 transition-colors font-medium text-gray-700 text-sm cursor-pointer">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/><path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/><path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/><path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/></svg>
+                Google (Gmail)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

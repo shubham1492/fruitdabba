@@ -81,8 +81,8 @@ const CATEGORIES: SubscriptionCategory[] = [
     bgColor: 'bg-emerald-50',
     borderColor: 'border-emerald-200',
     menuItems: [
-      'Mon — Grilled Chicken & Avocado',
-      'Tue — Sweet & Spicy Chicken',
+      'Mon — Grilled Paneer & Avocado',
+      'Tue — Sweet & Spicy Tofu',
       'Wed — Paneer Corn Salad',
       'Thu — Broccoli, Bell Pepper Mix',
       'Fri — Chickpea Quinoa Bowl',
@@ -128,9 +128,9 @@ const CATEGORIES: SubscriptionCategory[] = [
     borderColor: 'border-purple-200',
     menuItems: [
       'Mon — Paneer Tikka Bowl + Pomegranate',
-      'Tue — Chicken & Kiwi Protein Bowl',
+      'Tue — Soya & Kiwi Protein Bowl',
       'Wed — Tofu Sprouts Power Bowl',
-      'Thu — Eggs & Avocado Fitness Box',
+      'Thu — Paneer & Avocado Fitness Box',
       'Fri — Chickpea & Quinoa Gym Bowl',
       'Sat — Mixed Nuts & Fruit Recovery Bowl',
     ],
@@ -158,14 +158,14 @@ export default function SubscriptionCategoriesSection() {
   }
 
   return (
-    <section id="categories" className="py-20 sm:py-28 bg-[#fafaf8] relative overflow-hidden">
+    <section id="categories" className="pt-10 pb-16 sm:pt-14 sm:pb-20 bg-[#fafaf8] relative overflow-hidden">
       {/* Subtle background decoration */}
       <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
       <div className="absolute bottom-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-12">
           <span className="inline-flex items-center gap-2 rounded-full bg-[#22c55e]/10 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-[#22c55e] mb-4">
             <Gift size={13} /> Choose Your Subscription
           </span>

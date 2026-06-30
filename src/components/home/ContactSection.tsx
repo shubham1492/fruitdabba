@@ -38,7 +38,7 @@ export default function ContactSection() {
   }
 
   return (
-    <section id="contact" className="bg-secondary/40 py-16 sm:py-24">
+    <section id="contact" className="bg-secondary/40 pt-10 pb-16 sm:pt-14 sm:pb-20">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex max-w-2xl flex-col gap-3 mx-auto items-center text-center">
           <span className="inline-flex items-center rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-primary">
@@ -76,7 +76,7 @@ export default function ContactSection() {
                 </span>
                 <span>
                   <span className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">Email us</span>
-                  <span className="block font-semibold text-gray-900">hello@fruitdabba.com</span>
+                  <span className="block font-semibold text-gray-900">tryfruitdabba@gmail.com</span>
                 </span>
               </li>
 

@@ -54,7 +54,7 @@ const SLIDES = [
     color: '#059669',
     bg: 'from-emerald-50 to-green-100',
     image: '/images/hero-salad.png',
-    alt: 'Fresh colorful salad bowl with chicken, avocado and vegetables',
+    alt: 'Fresh colorful salad bowl with paneer, avocado and vegetables',
     floatEmojis: [
       { emoji: '🥦', top: '8%', left: '6%', anim: 3 },
       { emoji: '🍅', top: '10%', right: '7%', anim: 2 },
@@ -107,11 +107,11 @@ export default function HeroSection() {
   const slide = SLIDES[activeIdx]
 
   return (
-    <section className="relative overflow-hidden bg-white py-16 sm:py-24">
+    <section className="relative overflow-hidden bg-white pt-8 pb-16 sm:pt-12 sm:pb-24">
       <div className="pointer-events-none absolute -right-24 -top-24 w-80 h-80 rounded-full bg-forest/10 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-24 -left-24 w-80 h-80 rounded-full bg-orange/10 blur-3xl" />
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-12 items-center relative z-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 grid lg:grid-cols-2 gap-12 lg:items-start items-center relative z-10">
 
         {/* ── Left: Text content ── */}
         <div className="flex flex-col items-start text-left">
@@ -185,7 +185,7 @@ export default function HeroSection() {
         </div>
 
         {/* ── Right: Sliding image showcase ── */}
-        <div className="relative flex justify-center items-center">
+        <div className="relative flex justify-center items-center lg:pt-8">
 
           {/* Glowing background circle */}
           <div

@@ -42,9 +42,9 @@ const AUDIENCES = [
 
 export default function WhoIsItFor() {
   return (
-    <section id="why-us" className="py-20 sm:py-28 bg-[#f4fbf7] relative">
+    <section id="why-us" className="pt-10 pb-16 sm:pt-14 sm:pb-20 bg-[#f4fbf7] relative">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex max-w-2xl flex-col gap-3 mx-auto items-center text-center mb-16">
+        <div className="flex max-w-2xl flex-col gap-3 mx-auto items-center text-center mb-12">
           <span className="inline-flex items-center rounded-full bg-[#22c55e]/10 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-[#22c55e]">
             Who is it for?
           </span>

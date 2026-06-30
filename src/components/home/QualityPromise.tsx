@@ -24,7 +24,7 @@ const promiseItems = [
 
 export default function QualityPromise() {
   return (
-    <section id="quality" className="py-16 sm:py-24 bg-white">
+    <section id="quality" className="pt-10 pb-16 sm:pt-14 sm:pb-20 bg-white">
       <div className="mx-auto grid max-w-7xl items-center gap-12 px-4 sm:px-6 lg:grid-cols-2 lg:gap-16 lg:px-8">
         {/* Left column: Image */}
         <div className="relative">

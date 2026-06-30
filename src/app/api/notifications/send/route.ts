@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import { createAdminClient } from '@/lib/supabase/server';
 
 interface SendPayload {
   userId?: string;        // Send to a single user
@@ -27,6 +22,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    const supabase = await createAdminClient();
     const payload: SendPayload = await req.json();
     const { title, body, data, userId, userIds } = payload;
 
@@ -40,7 +36,7 @@ export async function POST(req: NextRequest) {
     const { data: tokenRows, error } = await query;
     if (error) throw error;
 
-    const tokens = tokenRows?.map((r) => r.token) ?? [];
+    const tokens = tokenRows?.map((r: any) => r.token) ?? [];
     if (tokens.length === 0) {
       return NextResponse.json({ success: true, sent: 0, message: 'No tokens found' });
     }
@@ -50,7 +46,7 @@ export async function POST(req: NextRequest) {
     const serverKey = process.env.FIREBASE_SERVER_KEY!;
 
     const results = await Promise.allSettled(
-      tokens.map((token) =>
+      tokens.map((token: any) =>
         fetch(fcmUrl, {
           method: 'POST',
           headers: {

@@ -51,27 +51,47 @@ export default function AuthModal() {
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!name || name.trim().length < 2) {
+    
+    const needsName = loginMethod === 'mobile' || mode === 'register'
+    if (needsName && (!name || name.trim().length < 2)) {
       toast.error('Please enter your full name')
       return
     }
-    if (!phone || phone.length < 10) {
-      toast.error('Please enter a valid 10-digit mobile number')
-      return
+
+    if (loginMethod === 'mobile') {
+      if (!phone || phone.length < 10) {
+        toast.error('Please enter a valid 10-digit mobile number')
+        return
+      }
+    } else {
+      if (!email || !email.includes('@')) {
+        toast.error('Please enter a valid email address')
+        return
+      }
     }
+
     setOtpLoading(true)
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: `+91${phone}`,
+      const signInParams: any = {
         options: {
-          data: {
-            full_name: name,
-          }
+          data: {}
         }
-      })
+      }
+      if (needsName) {
+        signInParams.options.data.full_name = name
+      }
+      
+      if (loginMethod === 'mobile') {
+        signInParams.phone = `+91${phone}`
+      } else {
+        signInParams.email = email
+        signInParams.options.emailRedirectTo = `${window.location.origin}/auth/callback`
+      }
+
+      const { error } = await supabase.auth.signInWithOtp(signInParams)
       if (error) throw error
       setOtpSent(true)
-      toast.success('OTP sent successfully!')
+      toast.success('OTP code sent successfully!')
     } catch (err: any) {
       toast.error(err.message || 'Failed to send OTP')
     } finally {
@@ -87,10 +107,18 @@ export default function AuthModal() {
     }
     setLoading(true)
     try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: `+91${phone}`,
+      const verifyParams: any = {
         token: otp,
-      })
+      }
+      if (loginMethod === 'mobile') {
+        verifyParams.phone = `+91${phone}`
+        verifyParams.type = 'sms'
+      } else {
+        verifyParams.email = email
+        verifyParams.type = 'email'
+      }
+
+      const { error } = await supabase.auth.verifyOtp(verifyParams)
       if (error) throw error
       toast.success('Successfully signed in!')
       closeAuthModal()
@@ -108,39 +136,6 @@ export default function AuthModal() {
   const handleResetPhone = () => {
     setOtpSent(false)
     setOtp('')
-  }
-
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setLoading(true)
-    try {
-      if (mode === 'register') {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: name },
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
-          },
-        })
-        if (error) throw error
-        toast.success('Registration successful! Please check your email to verify.')
-        closeAuthModal()
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password })
-        if (error) throw error
-        toast.success('Welcome back!')
-        closeAuthModal()
-        router.refresh()
-        if (authRedirectUrl) {
-          router.push(authRedirectUrl)
-        }
-      }
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Authentication failed')
-    } finally {
-      setLoading(false)
-    }
   }
 
   const handleGoogle = async () => {
@@ -191,11 +186,11 @@ export default function AuthModal() {
             {(['login', 'register'] as const).map((m) => (
               <button
                 key={m}
-                onClick={() => setMode(m)}
+                onClick={() => { setMode(m); setOtpSent(false); setOtp(''); }}
                 className={`flex-1 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${
                   mode === m
                     ? 'bg-forest text-white shadow-md'
-                    : 'text-gray-500 hover:text-gray-700'
+                    : 'text-gray-550 hover:text-gray-700'
                 }`}
               >
                 {m === 'login' ? 'Sign In' : 'Sign Up'}
@@ -203,38 +198,76 @@ export default function AuthModal() {
             ))}
           </div>
 
-          {/* Sub-tab for email vs mobile login */}
-          {mode === 'login' && (
-            <div className="flex justify-center gap-6 mb-6 border-b border-gray-100 pb-3">
-              <button
-                type="button"
-                onClick={() => setLoginMethod('email')}
-                className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
-                  loginMethod === 'email'
-                    ? 'border-forest text-forest font-extrabold'
-                    : 'border-transparent text-gray-450 hover:text-gray-600'
-                }`}
-              >
-                📧 Email Login
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoginMethod('mobile')}
-                className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
-                  loginMethod === 'mobile'
-                    ? 'border-forest text-forest font-extrabold'
-                    : 'border-transparent text-gray-450 hover:text-gray-600'
-                }`}
-              >
-                📱 Mobile Login (OTP)
-              </button>
-            </div>
-          )}
+          {/* Sub-tab for email vs mobile */}
+          <div className="flex justify-center gap-6 mb-6 border-b border-gray-100 pb-3">
+            <button
+              type="button"
+              onClick={() => { setLoginMethod('email'); setOtpSent(false); setOtp(''); }}
+              className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
+                loginMethod === 'email'
+                  ? 'border-forest text-forest font-extrabold'
+                  : 'border-transparent text-gray-450 hover:text-gray-650'
+              }`}
+            >
+              📧 Email
+            </button>
+            <button
+              type="button"
+              onClick={() => { setLoginMethod('mobile'); setOtpSent(false); setOtp(''); }}
+              className={`text-xs font-extrabold pb-1.5 border-b-2 transition-all ${
+                loginMethod === 'mobile'
+                  ? 'border-forest text-forest font-extrabold'
+                  : 'border-transparent text-gray-450 hover:text-gray-650'
+              }`}
+            >
+              📱 Mobile
+            </button>
+          </div>
 
-          {mode === 'login' && loginMethod === 'mobile' ? (
-            /* Phone OTP Login UI */
-            !otpSent ? (
-              <form onSubmit={handleRequestOtp} className="space-y-4">
+          {otpSent ? (
+            /* OTP Verification UI (Shared) */
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-xs font-bold text-gray-555 block">Verification Code</label>
+                  <button
+                    type="button"
+                    onClick={handleResetPhone}
+                    className="text-xs text-forest hover:underline font-bold cursor-pointer"
+                  >
+                    Change {loginMethod === 'email' ? 'Email' : 'Number'}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    type="text"
+                    placeholder="Enter 6-digit OTP"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    required
+                    pattern="[0-9]{6}"
+                    className="input pl-11 py-2.5 text-sm font-mono tracking-widest text-center"
+                  />
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5 text-center">
+                  Enter the code received via {loginMethod === 'email' ? 'email' : 'SMS'} (check browser toast notifications in local dev).
+                </p>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading || otp.length !== 6}
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading && <Loader2 size={16} className="animate-spin" />}
+                Verify & Sign In
+              </button>
+            </form>
+          ) : (
+            /* OTP Request UI */
+            <form onSubmit={handleRequestOtp} className="space-y-4">
+              {(loginMethod === 'mobile' || mode === 'register') && (
                 <div>
                   <label className="text-xs font-bold text-gray-500 mb-1.5 block">Full Name</label>
                   <div className="relative">
@@ -249,7 +282,9 @@ export default function AuthModal() {
                     />
                   </div>
                 </div>
+              )}
 
+              {loginMethod === 'mobile' ? (
                 <div>
                   <label className="text-xs font-bold text-gray-550 mb-1.5 block">Mobile Number</label>
                   <div className="relative">
@@ -266,112 +301,34 @@ export default function AuthModal() {
                     />
                   </div>
                 </div>
-
-                <button
-                  type="submit"
-                  disabled={otpLoading || phone.length !== 10 || !name.trim()}
-                  className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
-                >
-                  {otpLoading && <Loader2 size={16} className="animate-spin" />}
-                  Send OTP Code
-                </button>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
+              ) : (
                 <div>
-                  <div className="flex justify-between items-center mb-1.5">
-                    <label className="text-xs font-bold text-gray-550 block">Verification Code</label>
-                    <button
-                      type="button"
-                      onClick={handleResetPhone}
-                      className="text-xs text-forest hover:underline font-bold cursor-pointer"
-                    >
-                      Change Number
-                    </button>
-                  </div>
+                  <label className="text-xs font-bold text-gray-550 mb-1.5 block">Email Address</label>
                   <div className="relative">
-                    <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
                     <input
-                      type="text"
-                      placeholder="Enter 6-digit OTP (e.g. 123456)"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      type="email"
+                      placeholder="Enter email address"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
                       required
-                      pattern="[0-9]{6}"
-                      className="input pl-11 py-2.5 text-sm font-mono tracking-widest text-center"
+                      className="input pl-11 py-2.5 text-sm font-medium"
                     />
                   </div>
-                  <p className="text-[10px] text-gray-400 mt-1.5 text-center">
-                    Enter the code received via SMS (use **123456** in local testing).
-                  </p>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading || otp.length !== 6}
-                  className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
-                >
-                  {loading && <Loader2 size={16} className="animate-spin" />}
-                  Verify & Sign In
-                </button>
-              </form>
-            )
-          ) : (
-            /* Email Form */
-            <form onSubmit={handleEmailAuth} className="space-y-4">
-              {mode === 'register' && (
-                <div className="relative">
-                  <input
-                    type="text"
-                    placeholder="Full Name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    required
-                    className="input pl-11 py-2.5 text-sm"
-                  />
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">👤</span>
                 </div>
               )}
 
-              <div className="relative">
-                <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="input pl-11 py-2.5 text-sm"
-                />
-              </div>
-
-              <div className="relative">
-                <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-                <input
-                  type={showPass ? 'text' : 'password'}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="input pl-11 pr-11 py-2.5 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPass(!showPass)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400"
-                >
-                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-
               <button
                 type="submit"
-                disabled={loading}
-                className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2"
+                disabled={
+                  otpLoading || 
+                  (loginMethod === 'mobile' && (phone.length !== 10 || !name.trim())) ||
+                  (loginMethod === 'email' && (!email.trim() || (mode === 'register' && !name.trim())))
+                }
+                className="btn-primary w-full flex items-center justify-center gap-2 py-3 mt-2 cursor-pointer disabled:opacity-50"
               >
-                {loading && <Loader2 size={16} className="animate-spin" />}
-                {mode === 'login' ? 'Sign In' : 'Create Account'}
+                {otpLoading && <Loader2 size={16} className="animate-spin" />}
+                Send OTP Code
               </button>
             </form>
           )}

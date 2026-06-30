@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_PLANS, MOCK_PROFILES, MOCK_ORDERS } from '@/lib/supabase/mockData'
+import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_PLANS, MOCK_PROFILES, MOCK_ORDERS, MOCK_REVIEWS } from '@/lib/supabase/mockData'
 
 function initMockDb() {
   if (typeof global !== 'undefined') {
@@ -10,6 +10,7 @@ function initMockDb() {
         subscription_plans: JSON.parse(JSON.stringify(MOCK_PLANS)),
         profiles: JSON.parse(JSON.stringify(MOCK_PROFILES)),
         orders: JSON.parse(JSON.stringify(MOCK_ORDERS)),
+        reviews: JSON.parse(JSON.stringify(MOCK_REVIEWS)),
         addresses: [],
         subscriptions: [],
         order_items: [],
@@ -23,8 +24,15 @@ function initMockDb() {
 }
 
 export async function GET(req: NextRequest) {
+  const reset = req.nextUrl.searchParams.get('reset')
+  if (reset === 'true' && typeof global !== 'undefined') {
+    (global as any)._mockDb = null
+  }
   const db = initMockDb()
   const table = req.nextUrl.searchParams.get('table')
+  if (reset === 'true') {
+    return NextResponse.json({ success: true, message: 'Mock DB reset successfully' })
+  }
   if (!db || !table) {
     return NextResponse.json({ data: [], error: 'Table or DB not found' })
   }

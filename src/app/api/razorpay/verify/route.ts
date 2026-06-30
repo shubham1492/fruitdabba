@@ -124,24 +124,37 @@ export async function POST(req: NextRequest) {
     }
 
     // 3. Create order
+    const orderInsertData: any = {
+      user_id: userId,
+      subscription_id: subscriptionId,
+      address_id: savedAddress?.id || null,
+      subtotal,
+      delivery_fee: delivery,
+      discount: 0,
+      total,
+      status: 'confirmed',
+      payment_status: 'paid',
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+    }
+
+    // Safely check if the city column exists in the orders table before inserting it
+    const { error: columnCheckError } = await supabase
+      .from('orders')
+      .select('city')
+      .limit(1)
+    if (!columnCheckError) {
+      orderInsertData.city = address.city || null
+    }
+
     const { data: order } = await supabase
       .from('orders')
-      .insert({
-        user_id: userId,
-        subscription_id: subscriptionId,
-        address_id: savedAddress?.id || null,
-        subtotal,
-        delivery_fee: delivery,
-        discount: 0,
-        total,
-        status: 'confirmed',
-        payment_status: 'paid',
-        razorpay_order_id,
-        razorpay_payment_id,
-        razorpay_signature,
-      })
+      .insert(orderInsertData)
       .select()
       .single()
+
+
 
     if (!order) throw new Error('Failed to create order')
 

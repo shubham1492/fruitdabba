@@ -60,7 +60,7 @@ const MOCK_REVIEWS = [
     categoryLabel: '🥗 Salad Bowl',
     rating: 5,
     title: 'Healthy lunch sorted every day!',
-    body: 'Office lunch used to be a problem. Now I just wait for my FruitDabba salad delivery at 12pm. The grilled chicken salad is filling, fresh and absolutely delicious. Worth every rupee.',
+    body: 'Office lunch used to be a problem. Now I just wait for my FruitDabba salad delivery at 12pm. The paneer avocado salad is filling, fresh and absolutely delicious. Worth every rupee.',
     image_url: null,
     avatar_color: '#059669',
     initials: 'VS',
@@ -151,7 +151,7 @@ export default function ReviewsSection() {
 
   return (
     <>
-      <section id="reviews" className="py-20 sm:py-28 bg-forest-dark text-white overflow-hidden">
+      <section id="reviews" className="pt-10 pb-16 sm:pt-14 sm:pb-20 bg-forest-dark text-white overflow-hidden">
         {/* Subtle top line */}
         <div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none" />
 

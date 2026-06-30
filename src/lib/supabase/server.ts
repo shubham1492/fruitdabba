@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_PLANS, MOCK_PROFILES, MOCK_ORDERS } from './mockData'
+import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_PLANS, MOCK_PROFILES, MOCK_ORDERS, MOCK_REVIEWS } from './mockData'
 
 function getTableData(tableName: string | undefined): any[] {
   if (typeof global !== 'undefined') {
@@ -12,6 +12,7 @@ function getTableData(tableName: string | undefined): any[] {
         subscription_plans: JSON.parse(JSON.stringify(MOCK_PLANS)),
         profiles: JSON.parse(JSON.stringify(MOCK_PROFILES)),
         orders: JSON.parse(JSON.stringify(MOCK_ORDERS)),
+        reviews: JSON.parse(JSON.stringify(MOCK_REVIEWS)),
         addresses: [],
         subscriptions: [],
         order_items: [],
@@ -207,6 +208,8 @@ function getStubServerClient() {
       signUp: async () => ({ error: new Error('No Supabase URL configured') }),
       signInWithOAuth: async () => ({ error: new Error('No Supabase URL configured') }),
       signOut: async () => ({ error: null }),
+      signInWithOtp: async () => ({ data: { message: 'OTP sent' }, error: null }),
+      verifyOtp: async () => ({ data: { session: null, user: null }, error: null }),
     },
     from: (tableName: string) => createChainableMock(tableName),
   } as unknown as any
