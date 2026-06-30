@@ -177,7 +177,7 @@ export default function Navbar() {
           {/* Simple Link & User Dropdown */}
           <div className="flex items-center gap-4">
             <Link
-              href="/products"
+              href="/#plans"
               className="text-xs font-extrabold text-gray-600 hover:text-forest transition-all flex items-center gap-1 bg-cream hover:bg-cream-100 border border-gray-200 px-3.5 py-2 rounded-xl shadow-sm"
             >
               ← Continue Shopping
