@@ -20,8 +20,16 @@ const VAPID_KEY = process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY;
 // Lazily initialise Firebase so it only runs on client
 function getFirebaseApp() {
   if (typeof window === 'undefined') return null;
+  if (!firebaseConfig.apiKey || !firebaseConfig.projectId || firebaseConfig.projectId === 'your_firebase_project_id') {
+    return null;
+  }
   if (getApps().length > 0) return getApps()[0];
-  return initializeApp(firebaseConfig);
+  try {
+    return initializeApp(firebaseConfig);
+  } catch (err) {
+    console.error('[FCM] Failed to initialize Firebase App:', err);
+    return null;
+  }
 }
 
 /**
