@@ -2,82 +2,24 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { Mail, Lock, Eye, EyeOff, Loader2, Smartphone, Phone, User } from 'lucide-react'
+import { Mail, Lock, Eye, EyeOff, Loader2, Phone, User } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 import Link from 'next/link'
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [loginMethod, setLoginMethod] = useState<'email' | 'mobile'>('email')
   const [email, setEmail] = useState('')
   const [identifier, setIdentifier] = useState('') // For either email or phone in login
   const [password, setPassword] = useState('')
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
-  const [otp, setOtp] = useState('')
-  const [otpSent, setOtpSent] = useState(false)
-  const [otpLoading, setOtpLoading] = useState(false)
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectPath = searchParams.get('redirect') || '/'
   const supabase = createClient()
-
-  const handleRequestOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!name || name.trim().length < 2) {
-      toast.error('Please enter your full name')
-      return
-    }
-    if (!phone || phone.length < 10) {
-      toast.error('Please enter a valid 10-digit mobile number')
-      return
-    }
-    setOtpLoading(true)
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: `+91${phone}`,
-        options: { data: { full_name: name } }
-      })
-      if (error) throw error
-      setOtpSent(true)
-      toast.success('OTP sent successfully!')
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to send OTP')
-    } finally {
-      setOtpLoading(false)
-    }
-  }
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!otp || otp.length < 6) {
-      toast.error('Please enter a 6-digit OTP code')
-      return
-    }
-    setLoading(true)
-    try {
-      const { error } = await supabase.auth.verifyOtp({
-        phone: `+91${phone}`,
-        token: otp,
-      })
-      if (error) throw error
-      toast.success('Successfully signed in!')
-      router.push(redirectPath)
-      router.refresh()
-    } catch (err: any) {
-      toast.error(err.message || 'OTP verification failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleResetPhone = () => {
-    setOtpSent(false)
-    setOtp('')
-  }
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault()
